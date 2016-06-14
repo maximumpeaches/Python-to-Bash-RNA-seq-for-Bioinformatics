@@ -7,7 +7,7 @@ import time
 #You might want to edit these variables (without necessarily understanding the rest of the file)
 note = 'setting threads to 5. should fail and send an email to me.' #insert anything you'd like to output to the note file to this variable
 work_dir = '/work/m/maxwell9/'
-input_file = '/home/m/maxwell9/RNAseq/input'
+input_file = '/home/m/maxwell9/RNAseq/input.txt'
 email_to_send_output_to = 'maxwell.pietsch@gmail.com'
 
 def development_available():

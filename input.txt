@@ -1,0 +1,10 @@
+# number of directories to run algorithm for:
+1
+# sample directory
+/shares/biocomputing_i/FASTQ_Files/test2
+# gff file
+/shares/biocomputing_i/FASTQ_Files/test2/genes.gff
+# genome reference 
+/shares/biocomputing_i/FASTQ_Files/test2/genome.fa
+# number of threads
+5
