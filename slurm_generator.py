@@ -77,6 +77,9 @@ def check_pathname(variablename, pathname):
 		raise InputError(variablename, 'file or directory does not exist')
 	return pathname
 
+class Script:
+	def __init__(self):
+
 class SeqJob(object):
 
 	def __init__(self, unique_id, dev_flag):
@@ -85,44 +88,47 @@ class SeqJob(object):
 		assert(type(int(unique_id)) == int)
 		self.unique_id = unique_id
 		self.dev_flag = dev_flag
+
+	@property
+	def threads(self):
+		return self._threads
 	
-	def setThreads(self, thr = '4')
-		if (type(int(thr)) != int):
+	@threads.setter
+	def threads(self, threads = '4')
+		if (type(int(threads)) != int):
 			raise InputError('threads', 'must be an integer')
 		try:
-			if (int(thr) > 32 or int(thr) < 1):
+			if (int(threads) > 32 or int(threads) < 1):
 				raise InputError('threads', 'should be less than 32 and greater than 0. 32 was chosen somewhat arbitrarily. feel free to change it. it is probably a bit high.')
 		except InputError:
 			print('Setting threads to 4 and continuing execution')
-			thr = '4'
-		self.thr = thr
+			threads = '4'
+		self._threads = threads
 
-	def setGff(self, gff):
-		gff = check_pathname('gff', gff)
-		if '.gff' not in gff:
+
+	@property
+	def gff(self):
+		return self._gff
+
+	@gff.setter
+	def gff(self, value):
+		value = check_pathname('gff', value)
+		if '.gff' not in value:
 			raise InputError('gff','must contain .gff')
-		print('Gff file is ' + self.gff)
-		self.gff = gff
+		print('Gff file is ' + value)
+		self._gff = value
 
-	def setGenomeFasta(self, genome_fasta):
-		"""
-		Find the name of the .fasta file at the end of a pathname
-		and return that name
-		>>> find_fasta_prefix('/work/m/maxwell9/test/me/2gene.fasta/')
-		'2gene'
-		>>> find_fasta_prefix('/home/m/maxwell9/test/me/genome172.fa')
-		'genome172'
-		>>> find_fasta_prefix('/home/m/maxwell9/whatever/whatever/genome')
-		Traceback (most recent call last):
-			...
-		InputError: genome_index_path must contain .fa or .fasta
-		"""
-		genome_index_path = check_pathname('genome_index_path', genome_index)
+	@property
+	def genome_index_path(self):
+		return self._genome_index_path
+
+	@genome_index_path.setter
+	def genome_index_path(self, genome_index_path):
+		genome_index_path = check_pathname('genome_index_path', genome_index_path)
 		if not ('.fa' in genome_index_path or '.fasta' in genome_index_path):
 			raise InputError('genome_index_path', 'must contain .fa or .fasta')
-		self.genome_index_path = genome_index_path
-		print('Genome index path is ' + self.genome_index_path)
-
+		print('Genome index path is ' + genome_index_path)
+		self._genome_index_path = genome_index_path
 		if genome_index_path[len(genome_index_path) - 1] == '/': # if it ends with a forward slash, get rid of the last character
 			genome_index_path = genome_index_path[:len(genome_index_path) - 1]
 		index = genome_index_path.rfind('/')
@@ -138,18 +144,21 @@ class SeqJob(object):
 		gilist = genome_index.split('.')
 		if len(gilist) != 2:
 			raise InputError('genome_index', 'must be in the form \'oneword.anotherword\'')
-		self.genome_index_base = gilist[0]
-		
-		return self.genome_index_base # returning this so doctest tests work. not sure this is the best way to do this but can investigate later TODO
+		genome_index_base = gilist[0]
+		self.genome_index_base = genome_index_base
 
-
-	def setSampleDir(self, sample_dir):
-		sample_dir = check_pathname('sample_dir', f.readline())
+	@property
+	def sample_dir(self):
+		return self._sample_dir
+	
+	@sample_dir.setter
+	def sample_dir(self, sample_dir):
+		sample_dir = check_pathname('sample_dir', sample_dir)
 		#if the last character of the sample_dir is not a forward slash, then append a forward slash to the sample_dir
 		if sample_dir[len(sample_dir) - 1] != '/':
 			sample_dir = sample_dir + '/'
-		print('Sample directory is ' + self.sample_dir)
-		self.sample_dir = sample_dir
+		print('Sample directory is ' + sample_dir)
+		self._sample_dir = sample_dir
 
 	def returnSbatchParamString(self, job_name, job_time):
 		return ('#!/bin/bash\n\n#SBATCH --workdir=' + work_dir + 
@@ -176,6 +185,7 @@ class SeqJob(object):
 			if c.isdigit():
 				self.slurm_bt_id = str(out[i:len(out)]).strip()
 				break
+
 	def createAndSubmitSeqScript(self):
 		print('Scanning ' + sample_dir + ' for filenames containing \'.fastq\'')
 		fastqs = []
