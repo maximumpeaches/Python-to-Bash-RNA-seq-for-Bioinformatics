@@ -56,6 +56,7 @@ class InputError(Exception):
 
 def check_pathname(variablename, pathname):
 	"""
+	TODO this should really be a class that validates upon initalization
 	Checks that a given pathname is close to what a pathname should look like and that it exists
 	>>> check_pathname('genomefile', 'workmmaxwell9genome')
 	Traceback (most recent call last):
@@ -77,17 +78,153 @@ def check_pathname(variablename, pathname):
 		raise InputError(variablename, 'file or directory does not exist')
 	return pathname
 
-class Script:
-	def __init__(self):
+class SlurmScript(object):
+	
+	echo_info = '\necho "slurm job id: $SLURM_JOB_ID\nslurm cluster name: $SLURM_CLUSTER_NAME\nslurm nodelist: $SLURM_JOB_NODELIST"\n'
+
+	def __init__(self, obj, objtype):
+		self.unique_id = obj.unique_id
+		self.dev_flag = objtype.dev_flag
+		self._output_file = None
+		self._array_size = None
+		self._num_nodes = None
+		self._dependency_condition = None
+		self._filename = None
+	
+	@property
+	def job_name(self):
+		return self._job_name
+	
+	@job_name.setter
+	def job_name(self, value):
+		self._job_name = job_name
+
+	@property
+	def job_time(self):
+		return self._job_time
+	
+	@job_time.setter
+	def job_time(self, value):
+		self._job_time = value
+
+	@property
+	def output_file(self):
+		if self._output_file: #this way if someone wants to set a custom output_file that is cool or if they don't want to bother then we'll just output the standard one
+			return self._output_file
+		else:
+			return work_dir + self.job_name + self.unique_id
+
+	@output_file.setter
+	def output_file(self, val):
+		val = check_pathname(val)
+		self._output_file = val
+
+
+	@property
+	def text(self):
+		assert(job_time and job_name)
+		self._text = ('#!/bin/bash\n\n#SBATCH --workdir=' + work_dir + 
+			'\n#SBATCH --job-name=' + self.job_name + self.unique_id
+			+ self.dev_flag
+			+ '\n#SBATCH --time=' + self.job_time)
+		if self._output_file: # remember that we need to not define any output file for when we use the slurm array
+			self.text += '\n#SBATCH --output=' + self.output_file
+		self._text += self.echo_info
+		if self._array_size:
+			#TODO test that this works if there's only two reads in the directory. I mean, does the syntax `#SBATCH --array=1` make sense to SLURM?
+			# if not I can rewrite it so that the array is just not used at all in the script
+			if int(self.array_size) == 2:
+				self.text += '\n#SBATCH --array=1'
+			if int(self.array_size) > 2:
+				self.text += '\n#SBATCH --array=1-' + str(self.array_size)
+		if self._num_nodes:
+			self.text += '\n#SBATCH -N ' + self.num_nodes
+		if self._threads:
+			self.text += '\n#SBATCH -n ' + self.threads
+		if self._dependency_condition:
+			self.text += '\n#SBATCH --dependency=' + self.dependency_condition + ':' + self.dependent_on_id
+		return self._text
+
+	@property
+	def dependency_condition(self):
+		return self._dependency_condition
+	
+	@dependency_condition.setter
+	def dependency_condition(self, val):
+		self._dependency_condition = val
+
+	@property
+	def threads(self):
+		return self._threads
+	
+	@threads.setter
+	def threads(self, val):
+
+	@property
+	def num_nodes(self):
+		return self._num_nodes
+	
+	@num_nodes.setter
+	def num_nodes(self, val):
+		assert(type(int(val)) == int)
+		self._num_nodes = val
+
+	@property
+	def array_size(self):
+		return self._array_size
+	
+	@array_size.setter
+	def array_size(self, val):
+		assert(type(int(val)) == int)
+		assert(val >= 2) # must have at least two reads
+		self._array_size = val
+
+	@text.setter
+	def text(self, value):
+		self._text += value
+
+	@property
+	def slurm_id(self):
+		return str(self._slurm_id)
+	
+	@slurm_id.setter
+	def slurm_id(self, val):
+		val = val.strip()
+		assert(type(int(val)) == int)
+		self._slurm_id = str(val)
+
+	@property
+	def filename(self):
+		return self._filename
+	
+	@filename.setter
+	def filename(self, val):
+		self._filename = check_pathname(val)
+
+	def outputAndSubmit():
+		if not self.filename:
+			filename = work_dir + self.job_name + self.unique_id + '.sh'
+		with open(filename, 'w') as bt_script:
+			bt_script.write(self.text)
+		p = subprocess.Popen(['sbatch', filename], stdout=subprocess.PIPE)
+		out, err = p.communicate()	
+		print(out.strip())
+		print(err.strip())
+		for i, c in enumerate(out): #find location of first digit in out. This should be the start of the SLURM ID. Note how we output the SLURM IDs to the notes file below.
+			if c.isdigit():
+				self.slurm_id = str(out[i:len(out)]).strip()
+				break
 
 class SeqJob(object):
 
-	def __init__(self, unique_id, dev_flag):
-		assert(len(unique_id) != 0)
-		assert(type(unique_id) == str)
+	dev_flag = development_available()
+	btbuild_script = SlurmScript()
+	seq_script = SlurmScript()
+	notes_script = SlurmScript()
+
+	def __init__(self, unique_id):
 		assert(type(int(unique_id)) == int)
-		self.unique_id = unique_id
-		self.dev_flag = dev_flag
+		self.unique_id = str(unique_id)
 
 	@property
 	def threads(self):
@@ -104,7 +241,6 @@ class SeqJob(object):
 			print('Setting threads to 4 and continuing execution')
 			threads = '4'
 		self._threads = threads
-
 
 	@property
 	def gff(self):
@@ -160,34 +296,21 @@ class SeqJob(object):
 		print('Sample directory is ' + sample_dir)
 		self._sample_dir = sample_dir
 
-	def returnSbatchParamString(self, job_name, job_time):
-		return ('#!/bin/bash\n\n#SBATCH --workdir=' + work_dir + 
-			'\n#SBATCH --job-name=' + job_name + self.unique_id + 
-			'\n#SBATCH --output=' + work_dir + job_name + self.unique_id
-			+ self.dev_flag
-			+ '\n#SBATCH --time=' + job_time 
-			+ '\necho "slurm job id: $SLURM_JOB_ID\nslurm cluster name: $SLURM_CLUSTER_NAME\nslurm nodelist: $SLURM_JOB_NODELIST"\n')
-
-	def outputScript(filename, file_contents):
-		with open(filename, 'w') as bt_script:
-			bt_script.write(file_contents)
-		p = subprocess.Popen(['sbatch', filename], stdout=subprocess.PIPE)
-		out, err = p.communicate()	
-		print(out.strip())
-		print(err.strip())
-		return (out,err)
-
 	def createAndSubmitBtScript(self):
-		(out, err) = outputScript(work_dir + 'btbuild' + dir_id + '.sh', returnSbatchParamString('bt','00:08:00') 
-				+ '\ncp ' + self.genome_index_path + ' ' + work_dir + self.genome_index_base + self.unique_id + '.fa'
-				+ '\n\nbowtie2-build ' + self.genome_index_path + ' ' + work_dir + self.genome_index_base + self.unique_id)
-		for i, c in enumerate(out): #find location of first digit in out. This should be the start of the SLURM ID of the bt-build job
-			if c.isdigit():
-				self.slurm_bt_id = str(out[i:len(out)]).strip()
-				break
+		self.btbuild_script.job_name = 'bt'
+		self.btbuild_script.job_time = '00:08:00'
+		self.btbuild_script.text += '\ncp ' + self.genome_index_path + ' ' + work_dir + self.genome_index_base + self.unique_id + '.fa'
+				+ '\n\nbowtie2-build ' + self.genome_index_path + ' ' + work_dir + self.genome_index_base + self.unique_id
+		self.btbuild_script.outputAndSubmit()
+		
 
 	def createAndSubmitSeqScript(self):
-		print('Scanning ' + sample_dir + ' for filenames containing \'.fastq\'')
+		"""
+		Writes and submits a file which contains the meat of the pipeline.
+		"""
+		self.seq_script.job_name = 'seq'
+		self.seq_script.job_time = '01:55:00'
+		print('Scanning ' + self.sample_dir + ' for filenames containing \'.fastq\'')
 		fastqs = []
 		for file in os.listdir(self.sample_dir):
 			if '.fastq' in file:
@@ -204,61 +327,37 @@ class SeqJob(object):
 			sarray_count += 2
 			reads_arr += '\nreads[' + str(sarray_count) + ']="' + self.sample_dir + key + '"'
 			reads_arr += '\nreads[' + str(sarray_count + 1) + ']="' + self.sample_dir + reads[key] + '"'
-	
-			
-		seq_name = work_dir + 'slurmRNAseq' + self.unique_id + '.sh'	
-		print('Outputting primary pipeline script ' + seq_name + ' and calling sbatch')
-		#TODO test that this works if there's only two reads in the directory. I mean, does the syntax `#SBATCH --array=1` make sense to SLURM?
-		assert(len(reads) >= 2)
-		if len(reads) == 2:
-			arr_end = ''
-		elif len(reads) > 2:
-			arr_end = '-' + str(len(reads))
 
-		returnSbatchParamsString('seq','00:08:00')
-		output_sbatch = ('\n#SBATCH --workdir=' + work_dir 
-			+ '\n#SBATCH --job-name=seq' + dir_id 
-			+ '\n#SBATCH --time=01:55:00'
-			+ '\n#SBATCH --array=1' + arr_end 
-			+ '\n#SBATCH -N 1'
-			# note how we don't set the output file here with the -o flag, because doing that when
-			# using a slurm array will output all the data from the different members to the same
-			# file which makes it confusing to read. using $SLURM_ARRAY_TASK_ID with #SBATCH -o didn't work
-			+ '\n#SBATCH -n ' + threads 
-			+ '\n#SBATCH --dependency=afterok:' + slurm_bt_id.strip()
-			+ dev_flag + '\n')
+		print('Outputting primary pipeline script and calling sbatch')
+		self.seq_script.nodes = '1'
+		self.seq_script.array_size = len(reads)
+		self.seq_script.threads = threads
+		self.seq_script.dependency_condition = 'afterok'
+		self.seq_script.dependent_on_id = self.bt_script.slurm_id
+		# note how we don't set the output file here with the -o flag, because doing that when
+		# using a slurm array will output all the data from the different members to the same
+		# file which makes it confusing to read. using $SLURM_ARRAY_TASK_ID with #SBATCH -o didn't work
+
 		output_directory_suffix = dir_id.zfill(2) + '\'_\'$SLURM_ARRAY_TASK_ID'
 		tophat_out = 'thout_' + output_directory_suffix
 		cufflinks_out = 'clout_' + output_directory_suffix
 		cuffquant_out = 'cqout_' + output_directory_suffix	
 		
-		output_tophat = ('\ntophat2 -G ' + gff.strip() 
+		self.seq_script.text += ('\ntophat2 -G ' + gff.strip()
 			+ ' -o ' + tophat_out 
 			+ ' -p ' + threads 
 			+ ' ' + genome_prefix 
 			+ ' ${reads[$(($SLURM_ARRAY_TASK_ID * 2 - 2))]} ${reads[$(($SLURM_ARRAY_TASK_ID * 2 - 1))]}\n')
-		output_cuffquant = '\ncuffquant -p ' + threads + ' -o ' + cuffquant_out + ' ' + gff + ' ' + tophat_out + '/accepted_hits.bam\n'
-		output_cufflinks = ('\ncufflinks' 
+		self.seq_script.text += ('\ncufflinks' 
 			+ ' -p ' + threads 
 			+ ' -o ' + cufflinks_out 
 			+ ' ' + tophat_out + '/accepted_hits.bam\n')
-		output = ('#!/bin/bash\n' 
-			+ output_sbatch + '\n' 
-			+ reads_arr + '\n' 
-			+ echo_info + '\n' 
-			+ output_tophat + '\n' 
-			+ output_cufflinks + '\n'
-			+ output_cuffquant)
-		with open(seq_name, 'w') as slurm_script:
-			slurm_script.write(output)
-		p = subprocess.Popen(['sbatch', seq_name], stdout=subprocess.PIPE)
-		out, err = p.communicate()	
-		print(out.strip())
-
-		for i, c in enumerate(out): #find location of first digit in out. This should be the start of the SLURM ID. Note how we output the SLURM IDs to the notes file below.
-			if c.isdigit():
-				slurm_rnaseq_id = str(out[i:len(out)]).strip()
-				break	
+		self.seq_script.text += ('\ncuffquant '
+			+'-p ' + threads 
+			+ ' -o ' + cuffquant_out + ' ' 
+			+ gff + ' ' 
+			+ tophat_out + '/accepted_hits.bam\n')
+		self.seq_script.outputAndSubmit()
 		
 	def createAndSubmitNotesScript(self):
 		"""
@@ -267,15 +366,12 @@ class SeqJob(object):
 		# find the time at which the script is being submitted. This information will be output to the notes file.
 		curr_time = str(time.localtime().tm_hour).zfill(2) + '.' + str(time.localtime().tm_min).zfill(2)
 		curr_day = str(time.localtime().tm_mon).zfill(2) + '.' + str(time.localtime().tm_mday).zfill(2) + '.' + str(time.localtime().tm_year)
-
-		notes_file = work_dir + 'notes' + dir_id + 'at' + curr_time + 'on' + curr_day
-		print('Outputting file with notes at ' + notes_file)
-		with open(notes_file, 'w') as note_script:
-			note_script.write(
-				note 
-				+ '\nJob with custom ID ' + dir_id 
-				+ ' and slurm IDs ' + slurm_bt_id + ', ' + slurm_rnaseq_id 
+		self.notes_script.filename = work_dir + 'notes' + self.unique_id + 'at' + curr_time + 'on' + curr_day
+		self.notes_script.text = ('\nJob with custom ID ' + self.unique_id 
+				+ ' and slurm IDs ' + self.bt_script.slurm_id + ', ' + self.seq_script.slurm_id 
 				+ ' was submitted at ' + curr_time + ' on ' + curr_day)
+		self.notes_script.outputAndSubmit()
+		
 	def createAndSubmitPostScript(self):
 		"""
 		Creates and submits a script which does some cleanup, and notifies people via email about how a program with any errors encountered
@@ -357,7 +453,7 @@ if __name__ == '__main__':
 		if num_of_dirs < 1:
 			raise InputError('num_of_dirs', 'must be greater than or equal to 1')
 		for dir_num in range(num_of_dirs):
-			j = SeqJob(str(dir_num) + rand_id, dev_flag)
+			j = SeqJob(str(dir_num) + rand_id)
 			print('Reading from file \'' + input_file)
 			comment = f.readline()
 			j.setSampleDir(f.readline())
