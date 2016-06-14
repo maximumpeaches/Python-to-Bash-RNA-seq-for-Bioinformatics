@@ -11,6 +11,3 @@ Maxwell Pietsch
 maxwell.pietsch@gmail.com
 
 http://maxwell9.myweb.usf.edu
-
-### How do I use this? ###
-Currently this repository is not written for widespread dissemination but maybe you can get some idea from it for your own work.
