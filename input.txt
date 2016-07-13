@@ -1,10 +1,19 @@
-# number of directories to run algorithm for:
-1
+# For this input script to work, you have to keep comments to a single line. this script should contain various parameters you can set for your RNA-seq job. each parameter follows a comment describing what it refers to. 
+# working directory
+/work/m/maxwell9/
+# email to send output to
+maxwell.pietsch@gmail.com
 # sample directory
 /shares/biocomputing_i/FASTQ_Files/test2
 # gff file
 /shares/biocomputing_i/FASTQ_Files/test2/genes.gff
 # genome reference 
 /shares/biocomputing_i/FASTQ_Files/test2/genome.fa
-# number of threads
-5
+# number of CPU cores to request. Since we're using the slurm array, only 2 reads run on this number of CPUs, so don't need as many CPUs.
+2
+# amount of memory to request for Tophat in megabytes. this is the value of x in #SBATCH --mem=x.
+10000
+# number of hours the main script will take. must be < 2 hrs to run on dev partition.
+1
+# number of minutes the main script will take after the hours above have completed. must be < 60. for example if you wanted to schedule 5 hours and 15 minutes, you would put 5 in the line above and 15 in the line below.
+55
